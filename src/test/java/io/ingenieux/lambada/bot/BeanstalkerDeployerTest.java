@@ -1,6 +1,8 @@
 package io.ingenieux.lambada.bot;
 
 import br.com.ingenieux.beanstalker.BeanstalkerDeployer;
+import br.com.ingenieux.beanstalker.DeployerArgs;
+
 import com.amazonaws.services.lambda.runtime.ClientContext;
 import com.amazonaws.services.lambda.runtime.CognitoIdentity;
 import com.amazonaws.services.lambda.runtime.Context;
@@ -11,8 +13,9 @@ import org.junit.Test;
 
 import java.util.List;
 
+@Ignore
 public class BeanstalkerDeployerTest {
-    private BeanstalkerDeployer.DeployerArgs args;
+    private DeployerArgs args;
 
     private BeanstalkerDeployer deployer;
 
@@ -30,7 +33,7 @@ public class BeanstalkerDeployerTest {
      */
     @Before
     public void setUp() throws Exception {
-        this.args = new BeanstalkerDeployer.DeployerArgs();
+        this.args = new DeployerArgs();
 
         args.setApplicationName("multipackage-example");
         args.setCommitId("73031a04846d8adaee6fc1eb1b4bb98af9878c3b");
@@ -50,12 +53,7 @@ public class BeanstalkerDeployerTest {
         }
     }
 
-    LambdaLogger mockLogger = new LambdaLogger() {
-        @Override
-        public void log(String msg) {
-            System.err.println(msg);
-        }
-    };
+    LambdaLogger mockLogger = msg -> System.err.println(msg);
 
     Context mockContext = new Context() {
         @Override

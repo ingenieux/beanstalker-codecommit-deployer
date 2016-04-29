@@ -12,34 +12,38 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3URI;
-import io.ingenieux.lambada.runtime.LambadaFunction;
+
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.BatchingProgressMonitor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.zeroturnaround.zip.ZipUtil;
+
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.SimpleTimeZone;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.*;
 
-import static java.lang.String.format;
+import io.ingenieux.lambada.runtime.LambadaFunction;
+
 import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
 
 /**
- * {
- * "applicationName" : "multipackage-example",
- * "commitId" : "73031a04846d8adaee6fc1eb1b4bb98af9878c3b",
- * "repoName" : "ingenieux-image-blobs",
- * "targetPath" : "s3://elasticbeanstalk-us-east-1-235368163414/apps/multipackage-example/versions/git-73031a04846d8adaee6fc1eb1b4bb98af9878c3b.zip"
+ * { "applicationName" : "multipackage-example", "commitId" : "73031a04846d8adaee6fc1eb1b4bb98af9878c3b",
+ * "repoName" : "ingenieux-image-blobs", "targetPath" : "s3://elasticbeanstalk-us-east-1-235368163414/apps/multipackage-example/versions/git-73031a04846d8adaee6fc1eb1b4bb98af9878c3b.zip"
  * }
  */
 public class BeanstalkerDeployer {
+    private final Logger LOGGER = LoggerFactory.getLogger(BeanstalkerDeployer.class);
+
     private Context ctx;
 
     AmazonS3 s3;
@@ -58,121 +62,17 @@ public class BeanstalkerDeployer {
 
     private AWSCredentials credentials;
 
-    public static class DeployerArgs {
-        String accessKey;
-
-        public String getAccessKey() {
-            return accessKey;
-        }
-
-        public void setAccessKey(String accessKey) {
-            this.accessKey = accessKey;
-        }
-
-        String secretKey;
-
-        public String getSecretKey() {
-            return secretKey;
-        }
-
-        public void setSecretKey(String secretKey) {
-            this.secretKey = secretKey;
-        }
-
-        String applicationName;
-
-        public String getApplicationName() {
-            return applicationName;
-        }
-
-        public void setApplicationName(String applicationName) {
-            this.applicationName = applicationName;
-        }
-
-        String commitId;
-
-        public String getCommitId() {
-            return commitId;
-        }
-
-        public void setCommitId(String commitId) {
-            this.commitId = commitId;
-        }
-
-        String repoName;
-
-        public String getRepoName() {
-            return repoName;
-        }
-
-        public void setRepoName(String repoName) {
-            this.repoName = repoName;
-        }
-
-        String targetPath;
-
-        public String getTargetPath() {
-            return targetPath;
-        }
-
-        public void setTargetPath(String targetPath) {
-            this.targetPath = targetPath;
-        }
-
-        String region;
-
-        public String getRegion() {
-            return region;
-        }
-
-        public void setRegion(String region) {
-            this.region = region;
-        }
-
-        String description;
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        @Override
-        public String toString() {
-            return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE).
-                    append("applicationName", applicationName).
-                    append("accessKey", accessKey).
-                    append("description", description).
-                    append("commitId", commitId).
-                    append("repoName", repoName).
-                    append("targetPath", targetPath).
-                    append("region", region).
-                    toString();
-        }
-    }
-
     List<String> messageList = new ArrayList<>();
 
-    void log(String message, Object... args) {
-        String m = format(message, args);
-
-        final List<String> messagesToAdd = Arrays.asList(m.split("\n"));
-
-        for (String messageToAdd : messagesToAdd) {
-            ctx.getLogger().log(messageToAdd);
-        }
-
-        messageList.addAll(messagesToAdd);
-    }
-
-    @LambadaFunction(name = "beanstalk-codecommit-deployer", description = "beanstalker lambda helper function to convert codecommit commitIds into S3 Buckets and ApplicationVersions", memorySize = 512, role = "arn:aws:iam::*:role/lambda_basic_execution", timeout = 300)
+    @LambadaFunction(name = "beanstalker-codecommit-deployer",
+            description = "beanstalker lambda helper function to convert codecommit commitIds into S3 Buckets and ApplicationVersions",
+            memorySize = 512,
+            timeout = 300)
     public List<String> deploy(DeployerArgs args, Context ctx) throws Exception {
         this.ctx = ctx;
         this.args = args;
 
-        log("Called with args set to '%s'", args);
+        LOGGER.info("Called with args: {}", args);
 
         credentials = new BasicAWSCredentials(args.getAccessKey(), args.getSecretKey());
 
@@ -183,7 +83,7 @@ public class BeanstalkerDeployer {
 
         args.setRegion(regionName);
 
-        log("Using region %s", regionName);
+        LOGGER.info("Using region {}", regionName);
 
         if (!"us-east-1".equals(regionName)) {
             final Region region = Region.getRegion(Regions.fromName(regionName));
@@ -197,19 +97,19 @@ public class BeanstalkerDeployer {
         this.sourceDirectory = new File("/tmp/deployment");
         this.targetFile = new File("/tmp/deployment.zip");
 
-        log("Step #1: Checking out master from %s", args.getRepoName());
+        LOGGER.info("Step #1: Checking out master from {}", args.getRepoName());
 
         gitCheckout();
 
-        log("Step #2: Zipping Artifacts from Source Folder");
+        LOGGER.info("Step #2: Zipping Artifacts from Source Folder");
 
         zipFolder();
 
-        log("Step #3: Uploading Zip to %s", args.getTargetPath());
+        LOGGER.info("Step #3: Uploading Zip to {}", args.getTargetPath());
 
         uploadArchive();
 
-        log("Step #4: Creating Application Version for %s", args.getCommitId());
+        LOGGER.info("Step #4: Creating Application Version for {}", args.getCommitId());
 
         createVersion();
 
@@ -348,7 +248,7 @@ public class BeanstalkerDeployer {
         }
     }
 
-    private class LoggerProgressMonitor extends BatchingProgressMonitor {
+    class LoggerProgressMonitor extends BatchingProgressMonitor {
         @Override
         protected void onUpdate(String taskName, int workCurr) {
             StringBuilder s = new StringBuilder();
