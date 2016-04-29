@@ -42,6 +42,13 @@ import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
  * }
  */
 public class BeanstalkerDeployer {
+    /**
+     * Force Lambda Appender inclusion on minified jar
+     */
+    static {
+        com.amazonaws.services.lambda.runtime.log4j.LambdaAppender.class.getName();
+    }
+
     private final Logger LOGGER = LoggerFactory.getLogger(BeanstalkerDeployer.class);
 
     private Context ctx;
